@@ -1,0 +1,11 @@
+# Compiled executables
+client
+server
+
+# Object files
+*.o
+
+# Other common C artifacts
+*.out
+*.exe
+a.out
