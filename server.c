@@ -11,6 +11,9 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <pthread.h>
+
+void *handle_client(void *arg);
 
 int main(int argc, char *argv[]) {
     if (argc != 2) {
@@ -40,18 +43,16 @@ int main(int argc, char *argv[]) {
 
     if (bind(server_fd, (struct sockaddr *)&server_addr, sizeof(server_addr)) == -1) {
         perror("bind");
-        close(server_fd);
         exit(1);
     }
 
     // Step 3: Listen for connections
     if (listen(server_fd, 10) == -1) {
         perror("listen");
-        close(server_fd);
         exit(1);
     }
 
-    printf("Echo server listening on port %d...\n", port);
+    printf("Multi-client echo server listening on port %d...\n", port);
 
     // Step 4: Accept and handle connections
     while (1) {
@@ -69,27 +70,36 @@ int main(int argc, char *argv[]) {
         inet_ntop(AF_INET, &client_addr.sin_addr, client_ip, sizeof(client_ip));
         printf("Connection from %s:%d\n", client_ip, ntohs(client_addr.sin_port));
 
-        // Step 5: Echo loop
+	int *client_fd_ptr = malloc(sizeof(int));
+	*client_fd_ptr = client_fd;
+
+	pthread_t thread;
+	if (pthread_create(&thread, NULL, handle_client, client_fd_ptr) != 0) {
+		perror("pthread_create");
+		close(client_fd);
+		free(client_fd_ptr);
+		continue;
+	}
+	pthread_detach(thread);
+    }
+
+    return 0;
+}
+
+void *handle_client(void *arg) {
+        // Echo Loop
+	int client_fd = *(int *)arg;
+	free(arg);
+
         char buffer[1024];
         ssize_t bytes_received;
 
         while ((bytes_received = recv(client_fd, buffer, sizeof(buffer), 0)) > 0) {
-            // Echo back what we received
-            ssize_t bytes_sent = send(client_fd, buffer, bytes_received, 0);
-            if (bytes_sent == -1) {
-                perror("send");
-                break;
-            }
-        }
+		// Echo back what we received
+		send(client_fd, buffer, bytes_received, 0); 
+	}
 
-        if (bytes_received == -1) {
-            perror("recv");
-        }
-
-        printf("Client %s disconnected.\n", client_ip);
+        printf("Client disconnected.\n");
         close(client_fd);
-    }
-
-    close(server_fd);
-    return 0;
+	return NULL;
 }
